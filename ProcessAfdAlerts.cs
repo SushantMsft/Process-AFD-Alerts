@@ -37,11 +37,11 @@ namespace processAfdAlerts
         // Linked WAF Policy Info
         private static readonly string WafPolicyName = "AzureFrontdoorWafPolicy";
         private static readonly string WafPolicyResourceGroupName = "susitestrg";
-        private static readonly string WafPolicySubscriptionId = "27cafca8-b9a4-4264-b399-45d0c9cca1ab";
+        private static readonly string WafPolicySubscriptionId = "";
 
         // Frontdoor resourceId
         private static readonly string FrontdoorResourceId =
-            "/subscriptions/27cafca8-b9a4-4264-b399-45d0c9cca1ab/resourcegroups/susitestrg/providers/microsoft.cdn/profiles/demoafdxpremiumwithwaf";
+            "";
 
 
 
@@ -353,7 +353,7 @@ namespace processAfdAlerts
         private static async Task<IEnumerable<Row>> GetLogs(ILogger log, AlertInfo alertInfo)
         {
             // 1. Prepare the credentials to get logs, we need a aad app which has permissions to view the log
-            string workspaceId = "70a6a1f0-9644-448e-b2a8-f85166982bbf";
+            string workspaceId = "";
             var credential = new ClientSecretCredential(TenantId, ClientId, ClientSecret);
             var logsClient = new LogsQueryClient(credential);
 
