@@ -3,6 +3,7 @@
 
 # Azure Functions localsettings file
 local.settings.json
+host.json
 
 # User-specific files
 *.suo
@@ -14,7 +15,7 @@ local.settings.json
 *.userprefs
 
 #Publish profiles
-Properties/
+Properties/*
 
 # Build results
 [Dd]ebug/
