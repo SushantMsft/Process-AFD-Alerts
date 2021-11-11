@@ -23,6 +23,9 @@ namespace processAfdAlerts
     using Microsoft.Extensions.Logging;
     using Newtonsoft.Json;
 
+    /// <summary>
+    /// Azure function to process alerts from Azure front door
+    /// </summary>
     public static class ProcessAfdAlerts
     {
         // consts
@@ -35,15 +38,12 @@ namespace processAfdAlerts
         private static string TenantId = "";
 
         // Linked WAF Policy Info
-        private static readonly string WafPolicyName = "AzureFrontdoorWafPolicy";
-        private static readonly string WafPolicyResourceGroupName = "susitestrg";
+        private static readonly string WafPolicyName = "";
+        private static readonly string WafPolicyResourceGroupName = "";
         private static readonly string WafPolicySubscriptionId = "";
 
         // Frontdoor resourceId
-        private static readonly string FrontdoorResourceId =
-            "";
-
-
+        private static readonly string FrontdoorResourceId = "";
 
         [FunctionName("ProcessAfdAlerts")]
         public static async Task<IActionResult> Run(
@@ -53,6 +53,7 @@ namespace processAfdAlerts
         {
             // 1. Parse the alert message from the incoming request's body
             var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+
             AlertBody alertBody;
             try
             {
@@ -60,7 +61,6 @@ namespace processAfdAlerts
             }
             catch (Exception e)
             {
-                log.LogInformation($"Failed to deserailize {e.Message}");
                 return new BadRequestObjectResult("Failed to deserialize the request body");
             }
 
@@ -69,12 +69,13 @@ namespace processAfdAlerts
                 return new BadRequestObjectResult("AlertBody is null");
             }
 
+            // 2. Extract info from the alert
             var alertInfo = new AlertInfo()
             {
                 Country = alertBody.data.alertContext.condition.allOf[0].dimensions[0].value
             };
 
-            // 2. Check if the alert was fired/activated or resolved/deactivated, if fired then
+            // 3. Check if the alert was fired/activated or resolved/deactivated
             if (alertBody.data.essentials.monitorCondition == "Fired")
             {
                 alertInfo.baselineThreshold = Convert.ToInt32(Convert.ToDouble(alertBody.data.alertContext.condition.allOf[0].threshold)) + 1;
@@ -85,11 +86,7 @@ namespace processAfdAlerts
                 await HandleAlertResolved(log, alertInfo);
             }
 
-            var responseMessage = string.IsNullOrEmpty(requestBody)
-                ? "This HTTP triggered function executed successfully. Pass a name in the query string or in the request body for a personalized response."
-                : $"The request is, {JsonConvert.SerializeObject(alertBody)}";
-
-            return new OkObjectResult(responseMessage);
+            return new OkObjectResult("All done ... ");
         }
 
         private static async Task HandleAlertResolved(ILogger log, AlertInfo alertInfo)
@@ -115,12 +112,14 @@ namespace processAfdAlerts
 
         private static async Task UpdateLinkedWafPolicy(AlertInfo alertInfo, ILogger log, IEnumerable<Row> logs = null, bool deleteRules = false)
         {
-            // 1. Get the WAF policy
+            // 1. Create an instance of FrontdoorManagementClient
             var frontdoorClient =
                 new FrontDoorManagementClient(
                     SdkContext.AzureCredentialsFactory.FromServicePrincipal(ClientId, ClientSecret, TenantId, AzureEnvironment.AzureGlobalCloud));
+            
             frontdoorClient.SubscriptionId = WafPolicySubscriptionId;
 
+            // 2. Use it to get the WAF Policy
             WebApplicationFirewallPolicy wafPolicy;
             try
             {
@@ -138,7 +137,7 @@ namespace processAfdAlerts
                 throw;
             }
 
-            // 2. Update the WAF policy with the rules to stop this attack
+            // 3. Add or remove the rate limit rules from the WAF policy
             if (deleteRules)
             {
                 DeleteRulesFromWafPolicy(wafPolicy, alertInfo);
@@ -148,7 +147,7 @@ namespace processAfdAlerts
                 UpdateWafWithRulesToStopAttack(wafPolicy, alertInfo, logs);
             }
 
-            // 3. Update the WAF policy
+            // 4. Update/Deploy the WAF policy
             try
             {
                 await frontdoorClient.Policies.CreateOrUpdateAsync(WafPolicyResourceGroupName, WafPolicyName,
@@ -157,6 +156,7 @@ namespace processAfdAlerts
             catch (Exception e)
             {
                 log.LogError("Failed to update waf policy", e);
+                throw;
             }
             
         }
@@ -208,7 +208,7 @@ namespace processAfdAlerts
             AlertInfo alertInfo,
             IEnumerable<Row> logs)
         {
-            if (logs == null || logs.Count() == 0)
+            if (logs == null || !logs.Any())
             {
                 return;
             }
@@ -371,16 +371,15 @@ namespace processAfdAlerts
                 var response = await logsClient.QueryWorkspaceAsync<Row>(
                     workspaceId,
                     topIPs,
-                    new QueryTimeRange(TimeSpan.FromDays(30)));
+                    new QueryTimeRange(TimeSpan.FromMinutes(20)));
 
                 return response.Value;
             }
             catch (Exception ex)
             {
                 log.LogError($"Exception while querying log analytics workspace", ex);
+                throw;
             }
-
-            return null;
         }
     }
 }
